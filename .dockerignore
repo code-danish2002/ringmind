@@ -1,0 +1,10 @@
+.venv
+.env
+.env.*
+**/__pycache__
+.pytest_cache
+data/chroma
+data/*.sqlite3
+*.wav
+deploy
+tests

@@ -1,0 +1,59 @@
+# LLM pool for RingMind.
+#
+# Every provider speaks the OpenAI-compatible /chat/completions API. A provider is active only
+# when its api_key_env is set in .env; inactive ones are skipped silently, so an expired or
+# missing key never breaks anything. Models are tried in ascending `priority`. A model that
+# fails (rate limit, outage, bad key, too slow to start talking) is benched for a while and the
+# next one answers instead.
+#
+# Voice needs two things from a model: low time-to-first-token and reliable tool calling.
+# Check both with:  python -m scripts.verify_models
+
+providers:
+  groq:
+    base_url: https://api.groq.com/openai/v1
+    api_key_env: GROQ_API_KEY
+  # Z.ai (GLM). Keys from open.bigmodel.cn (mainland China) need
+  # GLM_BASE_URL=https://open.bigmodel.cn/api/paas/v4 in .env.
+  glm:
+    base_url: https://api.z.ai/api/paas/v4
+    base_url_env: GLM_BASE_URL
+    api_key_env: GLM_API_KEY
+  cerebras:
+    base_url: https://api.cerebras.ai/v1
+    api_key_env: CEREBRAS_API_KEY
+  google:
+    base_url: https://generativelanguage.googleapis.com/v1beta/openai
+    api_key_env: GOOGLE_API_KEY
+
+models:
+  # ---- Groq (free tier, very fast) ----
+  - provider: groq
+    model: openai/gpt-oss-120b
+    priority: 10
+    extra_body: {reasoning_effort: low, include_reasoning: false}
+  - provider: groq
+    model: openai/gpt-oss-20b
+    priority: 12
+    extra_body: {reasoning_effort: low, include_reasoning: false}
+  - provider: groq
+    model: qwen/qwen3.8-27b
+    priority: 14
+    extra_body: {reasoning_format: hidden}
+
+  # ---- GLM (backup while the key is valid) ----
+  # Thinking is off: it adds seconds of silence before the bot speaks.
+  - provider: glm
+    model: glm-5.3
+    priority: 20
+    extra_body: {thinking: {type: disabled}}
+
+  # ---- Optional extras: picked up automatically if you add the key later ----
+  - provider: cerebras
+    model: gpt-oss-120b
+    priority: 30
+    extra_body: {reasoning_effort: low}
+  - provider: google
+    model: gemini-2.5-flash
+    priority: 40
+    extra_body: {reasoning_effort: none}

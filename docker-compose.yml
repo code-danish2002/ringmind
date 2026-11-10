@@ -1,0 +1,72 @@
+# Full stack: Postgres + RingMind, plus Asterisk for free softphone calls (profile "phone").
+#
+#   docker compose up -d --build                     # database + bot  -> http://localhost:8080/talk
+#   docker compose --profile phone up -d --build     # + Asterisk (needs LAN_IP and SIP_PASSWORD in .env)
+#   docker compose up -d db                          # just the database, for running the app locally
+#
+# Secrets come from .env (never committed). Change POSTGRES_PASSWORD for anything public.
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ringmind
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ringmind}
+      POSTGRES_DB: ringmind
+    ports:
+      - "127.0.0.1:${DB_HOST_PORT:-5433}:5432"   # local-only, for running the app outside Docker
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ringmind -d ringmind"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  app:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://ringmind:${POSTGRES_PASSWORD:-ringmind}@db:5432/ringmind
+      HOST: 0.0.0.0
+      PORT: "8000"
+      AUDIOSOCKET_PORT: "9092"
+      ASTERISK_HOSTS: asterisk
+      KB_PATH: /data/chroma
+    ports:
+      - "${APP_HOST_PORT:-8080}:8000"
+    volumes:
+      - kbdata:/data
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  asterisk:
+    profiles: ["phone"]
+    build: ./deploy/asterisk
+    restart: unless-stopped
+    environment:
+      LAN_IP: ${LAN_IP:-}           # required; the container refuses to start without it
+      SIP_PASSWORD: ${SIP_PASSWORD:-} # required, 8+ characters
+      SIP_1001_CALLERID_NUM: ${SIP_1001_CALLERID_NUM:-+15551234567}
+      SIP_1002_CALLERID_NUM: ${SIP_1002_CALLERID_NUM:-+15550001111}
+      BOT_HOST: app
+      BOT_HTTP_PORT: "8000"
+      BOT_AUDIOSOCKET_PORT: "9092"
+    ports:
+      - "5060:5060/udp"
+      - "10000-10099:10000-10099/udp"
+    depends_on:
+      app:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  kbdata:

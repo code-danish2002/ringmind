@@ -1,0 +1,10 @@
+.venv/
+.env
+data/crm.sqlite3
+data/chroma/
+__pycache__/
+*.wav
+.env.bak*
+.pytest_cache/
+*.pyc
+.DS_Store
